@@ -1,0 +1,2861 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <title>Censo de Escuelas - Sistema de Ubicación</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
+
+    .location-marker {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 3px solid white;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      color: white;
+      font-weight: 800;
+      font-size: 13px;
+
+      box-shadow:
+        0 3px 10px rgba(0, 0, 0, .30);
+    }
+
+    .no-location-marker {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 3px solid white;
+
+      background: #64748b;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      color: white;
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .stats-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 8px;
+    }
+
+    .teacher-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .teacher-card:hover {
+      background: #f1f5f9;
+    }
+
+    .select-filter {
+      width: 100%;
+      font-size: 12px;
+      padding: 9px;
+
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+
+      outline: none;
+    }
+
+    .select-filter:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
+    }
+
+    .loading {
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: .5;
+      }
+
+      50% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: .5;
+      }
+    }
+  </style>
+
+</head>
+
+
+<body class="bg-slate-900">
+
+
+  <!-- ============================= -->
+  <!-- MAPA -->
+  <!-- ============================= -->
+
+  <div id="map"></div>
+
+
+  <!-- ============================= -->
+  <!-- PANEL PRINCIPAL -->
+  <!-- ============================= -->
+
+  <div class="fixed top-3 left-3 right-3 md:left-5 md:right-auto md:w-[410px] z-10">
+
+    <div class="glass-panel rounded-2xl shadow-2xl border border-white/60">
+
+      <!-- ENCABEZADO -->
+
+      <div class="p-4">
+
+        <div class="flex items-center justify-between">
+
+          <div class="flex items-center gap-3">
+
+            <div class="bg-blue-600 text-white p-3 rounded-xl shadow">
+              <i class="fa-solid fa-school text-lg"></i>
+            </div>
+
+            <div>
+
+              <h1 class="font-extrabold text-slate-900 text-base">
+                Censo de Escuelas
+              </h1>
+
+              <p id="totalCounter" class="text-xs text-slate-500 font-medium">
+                Cargando datos...
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <button onclick="toggleFiltros()" class="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-xl">
+
+            <i class="fa-solid fa-sliders"></i>
+
+          </button>
+
+        </div>
+
+
+        <!-- ============================= -->
+        <!-- ESTADÍSTICAS -->
+        <!-- ============================= -->
+
+        <div class="grid grid-cols-3 gap-2 mt-4">
+
+          <div class="stats-card text-center">
+
+            <div id="contadorMaestros" class="font-extrabold text-blue-600 text-lg">
+              0
+            </div>
+
+            <div class="text-[10px] text-slate-500">
+              Maestros
+            </div>
+
+          </div>
+
+
+          <div class="stats-card text-center">
+
+            <div id="contadorUbicaciones" class="font-extrabold text-green-600 text-lg">
+              0
+            </div>
+
+            <div class="text-[10px] text-slate-500">
+              Ubicaciones
+            </div>
+
+          </div>
+
+
+          <div class="stats-card text-center">
+
+            <div id="contadorMapeadas" class="font-extrabold text-purple-600 text-lg">
+              0
+            </div>
+
+            <div class="text-[10px] text-slate-500">
+              Mapeadas
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ============================= -->
+        <!-- BUSCADOR -->
+        <!-- ============================= -->
+
+        <div class="relative mt-4">
+
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          </i>
+
+          <input id="searchInput" type="text" placeholder="Buscar escuela o ubicación..."
+            oninput="aplicarFiltros()"
+            class="w-full pl-9 pr-4 py-2.5 bg-slate-100 text-sm rounded-xl border border-slate-200 outline-none focus:bg-white focus:border-blue-500">
+
+        </div>
+
+
+        <!-- ============================= -->
+        <!-- FILTROS -->
+        <!-- ============================= -->
+
+        <div id="filtrosContainer" class="space-y-3 mt-4 hidden md:block">
+
+
+          <!-- MUNICIPIO / CATEGORIA -->
+
+          <div class="grid grid-cols-2 gap-2">
+
+            <div>
+
+              <label class="text-[10px] font-bold uppercase text-slate-400">
+                Municipio
+              </label>
+
+              <select id="selectMunicipio" class="select-filter" onchange="aplicarFiltros()">
+
+                <option value="">
+                  Todos
+                </option>
+
+              </select>
+
+            </div>
+
+
+            <div>
+
+              <label class="text-[10px] font-bold uppercase text-slate-400">
+                Categoría
+              </label>
+
+              <select id="selectCategoria" class="select-filter" onchange="aplicarFiltros()">
+
+                <option value="">
+                  Todas
+                </option>
+
+              </select>
+
+            </div>
+
+          </div>
+
+
+          <!-- ASESOR / UBICACION -->
+
+          <div class="grid grid-cols-2 gap-2">
+
+            <div>
+
+              <label class="text-[10px] font-bold uppercase text-slate-400">
+                Asesor
+              </label>
+
+              <select id="selectAsesor" class="select-filter" onchange="aplicarFiltros()">
+
+                <option value="">
+                  Todos
+                </option>
+
+              </select>
+
+            </div>
+
+
+            <div>
+
+              <label class="text-[10px] font-bold uppercase text-slate-400">
+                Ubicación
+              </label>
+
+              <select id="selectUbicacion" class="select-filter" onchange="aplicarFiltros()">
+
+                <option value="">
+                  Todas
+                </option>
+
+              </select>
+
+            </div>
+
+          </div>
+
+
+          <!-- BOTÓN VER TODO -->
+
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="verTodasLasUbicaciones()"
+              class="bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl text-xs font-bold">
+              <i class="fa-solid fa-map-location-dot mr-1"></i>
+              Ver todas
+            </button>
+            <button onclick="crearRuta()"
+              class="bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl text-xs font-bold">
+              <i class="fa-solid fa-route mr-1"></i>
+              Crear ruta
+            </button>
+            <button onclick="abrirGestionAsignaciones()"
+              class="bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-xl text-xs font-bold">
+              <i class="fa-solid fa-user-gear mr-1"></i>
+              Gestionar
+            </button>
+          </div>
+          <a href="maestros.html"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center">
+            <i class="fa-solid fa-users mr-1"></i>
+            Ver maestros
+          </a>
+
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- TARJETA DE DETALLE -->
+  <!-- ============================= -->
+
+  <div id="detailCard"
+    class="fixed bottom-0 left-0 right-0 md:top-4 md:right-5 md:left-auto md:bottom-auto md:w-[450px] z-20 translate-y-full md:translate-y-0 md:opacity-0 md:pointer-events-none transition-all duration-300 p-3 md:p-0">
+
+    <div
+      class="glass-panel rounded-t-3xl md:rounded-2xl shadow-2xl border border-white/60 max-h-[88vh] overflow-y-auto">
+
+
+      <!-- TIRADOR -->
+
+      <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mt-3 mb-2 md:hidden">
+      </div>
+
+
+      <div class="p-5">
+
+
+        <!-- HEADER -->
+
+        <div class="flex justify-between items-start">
+
+          <div>
+
+            <span id="cardCategoria"
+              class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700 uppercase">
+              Categoría
+            </span>
+
+            <h2 id="cardUbicacionTitulo" class="text-xl font-extrabold text-slate-900 mt-2">
+              Ubicación
+            </h2>
+
+          </div>
+
+
+          <button onclick="cerrarDetalle()" class="text-slate-400 hover:text-slate-700 p-2">
+
+            <i class="fa-solid fa-xmark text-xl"></i>
+
+          </button>
+
+        </div>
+
+
+        <!-- INFORMACIÓN GENERAL -->
+
+        <div class="mt-4 grid grid-cols-2 gap-2">
+
+          <div class="bg-slate-50 p-3 rounded-xl border">
+
+            <span class="text-[10px] text-slate-400 block">
+              Municipio
+            </span>
+
+            <span id="cardMunicipio" class="font-bold text-sm">
+              ---
+            </span>
+
+          </div>
+
+
+          <div class="bg-slate-50 p-3 rounded-xl border">
+
+            <span class="text-[10px] text-slate-400 block">
+              Total maestros
+            </span>
+
+            <span id="cardTotalMaestros" class="font-bold text-sm">
+              0
+            </span>
+
+          </div>
+
+        </div>
+
+
+        <div class="bg-slate-50 p-3 rounded-xl border mt-2">
+
+          <span class="text-[10px] text-slate-400 block">
+            Dirección del sistema
+          </span>
+
+          <span id="cardDireccion" class="font-semibold text-sm">
+            ---
+          </span>
+
+        </div>
+
+
+        <!-- ASESORES -->
+
+        <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 mt-3">
+
+          <div class="flex items-center gap-2">
+
+            <i class="fa-solid fa-user-tie text-blue-600"></i>
+
+            <span class="text-[10px] font-bold uppercase text-blue-500">
+              Asesor(es)
+            </span>
+
+          </div>
+
+          <div id="cardAsesores" class="font-bold text-sm text-slate-800 mt-1">
+            ---
+          </div>
+
+        </div>
+
+
+        <!-- ESCUELAS -->
+
+        <div class="mt-4">
+
+          <div class="flex items-center justify-between mb-2">
+
+            <h3 class="font-extrabold text-sm text-slate-800">
+
+              <i class="fa-solid fa-school mr-1 text-blue-600"></i>
+
+              Escuela(s)
+
+            </h3>
+
+            <span id="cardTotalEscuelas" class="text-xs text-slate-500">
+              0
+            </span>
+
+          </div>
+
+
+          <div id="cardEscuelas" class="space-y-1 text-sm">
+          </div>
+
+        </div>
+
+
+        <!-- MAESTROS: solo acceso a la lista filtrada -->
+
+        <div class="mt-5">
+
+          <h3 class="font-extrabold text-sm text-slate-800 mb-2">
+            <i class="fa-solid fa-users mr-1 text-green-600"></i>
+            Maestros de esta escuela
+          </h3>
+
+          <div id="cardEscuelaMaestros" class="space-y-2">
+          </div>
+
+        </div>
+
+
+        <!-- GOOGLE MAPS -->
+
+        <a id="cardGmapsLink" href="#" target="_blank"
+          class="mt-5 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2">
+
+          <i class="fa-solid fa-location-arrow"></i>
+
+          Abrir ubicación en Google Maps
+
+        </a>
+
+
+        <!-- SIN COORDENADAS -->
+
+        <div id="sinCoordenadasAviso"
+          class="hidden mt-3 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs">
+
+          <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+
+          Esta ubicación todavía no tiene coordenadas registradas.
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <button id="restoreDetailBtn" onclick="restaurarDetalle()"
+    class="hidden fixed bottom-4 right-4 z-30 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-2xl text-xs font-bold">
+    <i class="fa-solid fa-up-right-and-down-left-from-center mr-1"></i>
+    Ver información
+  </button>
+
+  <!-- ============================= -->
+  <!-- MODAL ELEGIR APP DE RUTA -->
+  <!-- ============================= -->
+
+  <div id="rutaAppModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5">
+      <div class="text-center">
+        <div class="mx-auto bg-green-100 text-green-600 w-14 h-14 rounded-2xl flex items-center justify-center">
+          <i class="fa-solid fa-route text-2xl"></i>
+        </div>
+        <h2 class="font-extrabold text-lg text-slate-900 mt-3">¿Dónde quieres navegar?</h2>
+        <p class="text-xs text-slate-500 mt-1">
+          La ruta ya fue creada. Elige la aplicación que prefieras.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mt-5">
+        <button onclick="elegirAppRuta('google')"
+          class="py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm">
+          <i class="fa-brands fa-google mr-1"></i>
+          Google Maps
+        </button>
+
+        <button onclick="elegirAppRuta('waze')"
+          class="py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm">
+          <i class="fa-solid fa-car mr-1"></i>
+          Waze
+        </button>
+      </div>
+
+      <button onclick="cerrarSelectorRuta()"
+        class="w-full mt-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs">
+        Cancelar
+      </button>
+
+      <p class="text-[10px] text-slate-400 text-center mt-3">
+        En Google Maps se intenta incluir todos los puntos. Waze abrirá el siguiente destino para iniciar la navegación.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- MODAL GESTIÓN MUNICIPIOS / ASESORES -->
+  <!-- ============================= -->
+
+  <div id="gestionModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div class="p-5 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+        <div>
+          <h2 class="font-extrabold text-lg text-slate-900">Gestionar asignaciones</h2>
+          <p id="gestionResumen" class="text-xs text-slate-500 mt-1">Se aplicará a los registros del filtro actual.</p>
+        </div>
+        <button onclick="cerrarGestionAsignaciones()" class="p-2 text-slate-400 hover:text-slate-800">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-5">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+          <i class="fa-solid fa-circle-info mr-1"></i>
+          Los cambios se aplican a <b>todos los registros que coinciden con los filtros activos</b>. Si no hay filtros, se aplican a todos los registros.
+        </div>
+
+        <section class="border rounded-2xl p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="bg-amber-100 text-amber-700 rounded-xl p-2"><i class="fa-solid fa-location-dot"></i></div>
+            <div><h3 class="font-extrabold">Municipio</h3><p class="text-[11px] text-slate-500">Asigna o desasigna municipio.</p></div>
+          </div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">Municipio</label>
+          <input id="gestionMunicipio" list="listaMunicipiosGestion" placeholder="Escribe o selecciona un municipio"
+            class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-300 outline-none focus:border-blue-500">
+          <datalist id="listaMunicipiosGestion"></datalist>
+          <div class="grid grid-cols-2 gap-2 mt-3">
+            <button onclick="asignarMunicipio()" class="py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm">
+              <i class="fa-solid fa-check mr-1"></i>Asignar
+            </button>
+            <button onclick="desasignarMunicipio()" class="py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-sm">
+              <i class="fa-solid fa-link-slash mr-1"></i>Desasignar
+            </button>
+          </div>
+        </section>
+
+        <section class="border rounded-2xl p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="bg-purple-100 text-purple-700 rounded-xl p-2"><i class="fa-solid fa-user-tie"></i></div>
+            <div><h3 class="font-extrabold">Asesor</h3><p class="text-[11px] text-slate-500">Agrega un asesor nuevo o selecciona uno existente.</p></div>
+          </div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">Asesor</label>
+          <input id="gestionAsesor" list="listaAsesoresGestion" placeholder="Escribe el nombre del asesor"
+            class="w-full mt-1 px-3 py-3 rounded-xl border border-slate-300 outline-none focus:border-blue-500">
+          <datalist id="listaAsesoresGestion"></datalist>
+          <div class="grid grid-cols-2 gap-2 mt-3">
+            <button onclick="asignarAsesor()" class="py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm">
+              <i class="fa-solid fa-user-plus mr-1"></i>Agregar / asignar
+            </button>
+            <button onclick="desasignarAsesor()" class="py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-sm">
+              <i class="fa-solid fa-user-minus mr-1"></i>Quitar
+            </button>
+          </div>
+        </section>
+
+        <div id="gestionEstado" class="hidden rounded-xl p-3 text-sm"></div>
+      </div>
+
+      <div class="p-5 border-t">
+        <button onclick="cerrarGestionAsignaciones()" class="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= -->
+  <!-- MODAL ERROR -->
+  <!-- ============================= -->
+
+  <div id="errorModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-5">
+
+      <div class="flex items-center gap-3">
+
+        <div class="bg-red-100 text-red-600 p-3 rounded-xl">
+
+          <i class="fa-solid fa-triangle-exclamation"></i>
+
+        </div>
+
+        <div>
+
+          <h2 class="font-extrabold">
+            Error al cargar los datos
+          </h2>
+
+          <p class="text-xs text-slate-500">
+            Revisa la conexión con Supabase.
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <pre id="errorText" class="mt-4 bg-slate-100 p-3 rounded-xl text-xs overflow-auto max-h-60 whitespace-pre-wrap">
+            </pre>
+
+
+      <button onclick="cerrarError()" class="mt-4 w-full bg-slate-800 text-white py-2.5 rounded-xl font-bold">
+
+        Cerrar
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- JAVASCRIPT -->
+  <!-- ============================= -->
+
+  <script>
+
+
+    /* =========================================================
+       SUPABASE
+    ========================================================= */
+
+    const SUPABASE_URL = "https://vlbevbsvxdjmewudzdhf.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsYmV2YnN2eGRqbWV3dWR6ZGhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExNTMyMjUsImV4cCI6MjEwNjcyOTIyNX0.6NS2vrEjL2p3Ohzkgj78YdGmbQqLzKsEEnQehlCv2YI";
+
+
+    const supabaseClient =
+      supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+
+    /* =========================================================
+       VARIABLES
+    ========================================================= */
+
+    let map;
+
+    let markersGroup;
+
+    let escuelasData = [];
+
+    let ubicacionesData = [];
+
+    let selectedUbicacion = null;
+
+    let selectedEscuela = null;
+
+    let dpiVisible = false;
+    let rutaLayer = null;
+    let rutaActiva = false;
+
+
+    /* =========================================================
+       FUNCIONES DE TEXTO
+    ========================================================= */
+
+    function texto(valor) {
+
+      if (
+        valor === null ||
+        valor === undefined
+      ) {
+        return "";
+      }
+
+      return String(valor).trim();
+    }
+
+
+    function escaparHTML(valor) {
+
+      return texto(valor)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+
+    function normalizar(valor) {
+
+      return texto(valor)
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+
+    /* =========================================================
+       OBTENER COORDENADAS
+    ========================================================= */
+
+    function obtenerLatitud(item) {
+
+      const valor =
+        item.Latitud ??
+        item.latitud ??
+        item.LATITUD ??
+        item.latitude;
+
+      if (
+        valor === null ||
+        valor === undefined ||
+        valor === ""
+      ) {
+        return null;
+      }
+
+      const numero =
+        parseFloat(
+          String(valor).replace(",", ".")
+        );
+
+      return Number.isFinite(numero)
+        ? numero
+        : null;
+    }
+
+
+    function obtenerLongitud(item) {
+
+      const valor =
+        item.Longitud ??
+        item.longitud ??
+        item.LONGITUD ??
+        item.longitude;
+
+      if (
+        valor === null ||
+        valor === undefined ||
+        valor === ""
+      ) {
+        return null;
+      }
+
+      const numero =
+        parseFloat(
+          String(valor).replace(",", ".")
+        );
+
+      return Number.isFinite(numero)
+        ? numero
+        : null;
+    }
+
+
+    /* =========================================================
+       OBTENER UBICACIÓN
+    ========================================================= */
+
+    function obtenerUbicacion(item) {
+
+      return texto(
+        item.ubicacion ??
+        item.Ubicacion ??
+        item.UBICACION ??
+        item["Ubicación"]
+      );
+    }
+
+
+    /* =========================================================
+       INICIAR MAPA
+    ========================================================= */
+
+    function initMap() {
+
+      map =
+        L.map(
+          "map",
+          {
+            zoomControl: false
+          }
+        ).setView(
+          [14.8333, -91.5167],
+          11
+        );
+
+
+      L.control.zoom({
+        position: "bottomright"
+      }).addTo(map);
+
+
+      /*
+       * MAPA ESRI
+       */
+
+      L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 19,
+          attribution:
+            "Tiles &copy; Esri"
+        }
+      ).addTo(map);
+
+
+      /*
+       * GRUPO DE MARCADORES
+       *
+       * Esto evita que los marcadores con
+       * las mismas coordenadas desaparezcan
+       * uno encima de otro.
+       */
+
+      markersGroup =
+        L.markerClusterGroup({
+
+          showCoverageOnHover: false,
+
+          spiderfyOnMaxZoom: true,
+
+          zoomToBoundsOnClick: true,
+
+          removeOutsideVisibleBounds: true,
+
+          disableClusteringAtZoom: 17
+
+        });
+
+
+      map.addLayer(markersGroup);
+
+
+      cargarDatosSupabase();
+
+    }
+
+
+    /* =========================================================
+       CARGAR DATOS
+    ========================================================= */
+
+    async function cargarDatosSupabase() {
+
+      mostrarEstado(
+        "Cargando datos desde Supabase..."
+      );
+
+
+      try {
+
+        const {
+          data,
+          error
+        } =
+          await supabaseClient
+            .from("bd")
+            .select("*");
+
+
+        if (error) {
+
+          throw error;
+
+        }
+
+
+        escuelasData =
+          Array.isArray(data)
+            ? data
+            : [];
+
+
+        console.log(
+          "Registros recibidos:",
+          escuelasData.length
+        );
+
+
+        if (!escuelasData.length) {
+
+          mostrarEstado(
+            "Supabase no devolvió registros."
+          );
+
+          return;
+
+        }
+
+
+        /*
+         * Crear ubicaciones
+         */
+
+        ubicacionesData =
+          agruparUbicaciones(
+            escuelasData
+          );
+
+
+        console.log(
+          "Ubicaciones encontradas:",
+          ubicacionesData.length
+        );
+
+
+        console.log(
+          "Ubicaciones con coordenadas:",
+          ubicacionesData.filter(
+            u => u.tieneCoordenadas
+          ).length
+        );
+
+
+        console.log(
+          "Ubicaciones sin coordenadas:",
+          ubicacionesData.filter(
+            u => !u.tieneCoordenadas
+          ).length
+        );
+
+
+        /*
+         * Crear filtros
+         */
+
+        actualizarFiltrosDependientes();
+
+
+        /*
+         * Mostrar todo
+         */
+
+        mostrarUbicacionesEnMapa(
+          ubicacionesData
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "ERROR SUPABASE:",
+          error
+        );
+
+
+        mostrarError(
+          error
+        );
+
+      }
+
+    }
+
+
+    /* =========================================================
+       AGRUPAR POR UBICACIÓN
+    ========================================================= */
+
+    function agruparUbicaciones(lista) {
+
+      const mapa =
+        new Map();
+
+
+      lista.forEach(item => {
+
+        const nombreUbicacion =
+          obtenerUbicacion(item);
+
+
+        const lat =
+          obtenerLatitud(item);
+
+
+        const lng =
+          obtenerLongitud(item);
+
+
+        /*
+         * IMPORTANTE:
+         *
+         * Primero agrupamos por el nombre
+         * de Ubicación.
+         *
+         * De esta manera:
+         *
+         * Ubicación 1
+         * Ubicación 2
+         * ...
+         * Ubicación 43
+         *
+         * se mantienen aunque una no
+         * tenga coordenadas.
+         */
+
+        let key;
+
+
+        if (nombreUbicacion) {
+
+          key =
+            normalizar(
+              nombreUbicacion
+            );
+
+        } else {
+
+          /*
+           * Si por alguna razón un registro
+           * no tiene nombre de ubicación,
+           * intentamos agruparlo por coordenadas.
+           */
+
+          if (
+            lat !== null &&
+            lng !== null
+          ) {
+
+            key =
+              `coord_${lat.toFixed(6)}_${lng.toFixed(6)}`;
+
+          } else {
+
+            key =
+              "sin_ubicacion";
+
+          }
+
+        }
+
+
+        if (!mapa.has(key)) {
+
+          mapa.set(
+            key,
+            {
+
+              key,
+
+              nombreUbicacion:
+                nombreUbicacion ||
+                "Sin ubicación",
+
+              latitud:
+                lat,
+
+              longitud:
+                lng,
+
+              tieneCoordenadas:
+                lat !== null &&
+                lng !== null,
+
+              maestros: [],
+
+              escuelas:
+                new Set(),
+
+              categorias:
+                new Set(),
+
+              municipios:
+                new Set(),
+
+              asesores:
+                new Set(),
+
+              direcciones:
+                new Set()
+
+            }
+          );
+
+        }
+
+
+        const grupo =
+          mapa.get(key);
+
+
+        /*
+         * Agregar maestro
+         */
+
+        grupo.maestros.push(
+          item
+        );
+
+
+        /*
+         * Escuela
+         */
+
+        const escuela =
+          texto(
+            item.nombre_establecimiento
+          );
+
+        if (escuela) {
+
+          grupo.escuelas.add(
+            escuela
+          );
+
+        }
+
+
+        /*
+         * Categoría
+         */
+
+        const categoria =
+          texto(
+            item.categoria
+          );
+
+        if (categoria) {
+
+          grupo.categorias.add(
+            categoria
+          );
+
+        }
+
+
+        /*
+         * Municipio
+         */
+
+        const municipio =
+          texto(
+            item.municipio
+          );
+
+        if (municipio) {
+
+          grupo.municipios.add(
+            municipio
+          );
+
+        }
+
+
+        /*
+         * Asesor
+         */
+
+        const asesor =
+          texto(
+            item.asesor_asignado
+          );
+
+        if (asesor) {
+
+          grupo.asesores.add(
+            asesor
+          );
+
+        }
+
+
+        /*
+         * Dirección
+         */
+
+        const direccion =
+          texto(
+            item.direccion_sistema
+          );
+
+        if (direccion) {
+
+          grupo.direcciones.add(
+            direccion
+          );
+
+        }
+
+
+        /*
+         * Si el primer registro no tenía
+         * coordenadas pero otro sí,
+         * usamos las coordenadas encontradas.
+         */
+
+        if (
+          !grupo.tieneCoordenadas &&
+          lat !== null &&
+          lng !== null
+        ) {
+
+          grupo.latitud =
+            lat;
+
+          grupo.longitud =
+            lng;
+
+          grupo.tieneCoordenadas =
+            true;
+
+        }
+
+      });
+
+
+      return Array.from(
+        mapa.values()
+      );
+
+    }
+
+
+    /* =========================================================
+       FILTROS DEPENDIENTES
+    ========================================================= */
+
+    function actualizarFiltrosDependientes() {
+
+      const municipio =
+        document.getElementById(
+          "selectMunicipio"
+        ).value;
+
+
+      const categoria =
+        document.getElementById(
+          "selectCategoria"
+        ).value;
+
+
+      const asesor =
+        document.getElementById(
+          "selectAsesor"
+        ).value;
+
+
+      const ubicacion =
+        document.getElementById(
+          "selectUbicacion"
+        ).value;
+
+
+      /*
+       * Guardamos los valores actuales.
+       */
+
+      const valores = {
+
+        municipio,
+
+        categoria,
+
+        asesor,
+
+        ubicacion
+
+      };
+
+
+      /*
+       * Actualizamos cada lista usando
+       * los otros filtros.
+       */
+
+      actualizarSelect(
+        "selectMunicipio",
+        "municipio",
+        valores
+      );
+
+
+      actualizarSelect(
+        "selectCategoria",
+        "categoria",
+        valores
+      );
+
+
+      actualizarSelect(
+        "selectAsesor",
+        "asesor",
+        valores
+      );
+
+
+      actualizarSelect(
+        "selectUbicacion",
+        "ubicacion",
+        valores
+      );
+
+    }
+
+
+    function actualizarSelect(
+      id,
+      campoExcluir,
+      valores
+    ) {
+
+      const select =
+        document.getElementById(id);
+
+
+      /*
+       * Obtener registros compatibles
+       * con los demás filtros.
+       */
+
+      const disponibles =
+        escuelasData.filter(
+          item => {
+
+            if (
+              campoExcluir !==
+              "municipio" &&
+              valores.municipio &&
+              texto(item.municipio) !==
+              valores.municipio
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              campoExcluir !==
+              "categoria" &&
+              valores.categoria &&
+              texto(item.categoria) !==
+              valores.categoria
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              campoExcluir !==
+              "asesor" &&
+              valores.asesor &&
+              texto(item.asesor_asignado) !==
+              valores.asesor
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              campoExcluir !==
+              "ubicacion" &&
+              valores.ubicacion &&
+              normalizar(
+                obtenerUbicacion(item)
+              ) !==
+              normalizar(
+                valores.ubicacion
+              )
+            ) {
+
+              return false;
+
+            }
+
+
+            return true;
+
+          }
+        );
+
+
+      let opciones = [];
+
+
+      if (
+        campoExcluir ===
+        "municipio"
+      ) {
+
+        opciones =
+          disponibles
+            .map(
+              item =>
+                texto(
+                  item.municipio
+                )
+            )
+            .filter(Boolean);
+
+      }
+
+
+      if (
+        campoExcluir ===
+        "categoria"
+      ) {
+
+        opciones =
+          disponibles
+            .map(
+              item =>
+                texto(
+                  item.categoria
+                )
+            )
+            .filter(Boolean);
+
+      }
+
+
+      if (
+        campoExcluir ===
+        "asesor"
+      ) {
+
+        opciones =
+          disponibles
+            .map(
+              item =>
+                texto(
+                  item.asesor_asignado
+                )
+            )
+            .filter(Boolean);
+
+      }
+
+
+      if (
+        campoExcluir ===
+        "ubicacion"
+      ) {
+
+        opciones =
+          disponibles
+            .map(
+              item =>
+                obtenerUbicacion(item)
+            )
+            .filter(Boolean);
+
+      }
+
+
+      opciones =
+        [...new Set(opciones)]
+          .sort(
+            (a, b) =>
+              a.localeCompare(
+                b,
+                "es",
+                {
+                  sensitivity: "base"
+                }
+              )
+          );
+
+
+      /*
+       * Valor seleccionado actualmente
+       */
+
+      const valorActual =
+        valores[campoExcluir];
+
+
+      /*
+       * Si ya no existe por los otros filtros,
+       * se elimina.
+       */
+
+      let valorFinal =
+        valorActual;
+
+
+      if (
+        valorActual &&
+        !opciones.some(
+          opcion =>
+            normalizar(opcion) ===
+            normalizar(valorActual)
+        )
+      ) {
+
+        valorFinal = "";
+
+      }
+
+
+      /*
+       * Crear opciones
+       */
+
+      const textoInicial =
+        campoExcluir === "municipio"
+          ? "Todos"
+          : campoExcluir === "categoria"
+            ? "Todas"
+            : campoExcluir === "asesor"
+              ? "Todos"
+              : "Todas";
+
+
+      select.innerHTML =
+        `<option value="">${textoInicial}</option>`;
+
+
+      opciones.forEach(
+        opcion => {
+
+          const selected =
+            normalizar(opcion) ===
+              normalizar(valorFinal)
+              ? "selected"
+              : "";
+
+
+          select.innerHTML +=
+            `<option value="${escaparHTML(opcion)}" ${selected}>
+                            ${escaparHTML(opcion)}
+                        </option>`;
+
+        }
+      );
+
+    }
+
+
+    /* =========================================================
+       APLICAR FILTROS
+    ========================================================= */
+
+    function obtenerRegistrosFiltradosActuales() {
+
+      const search = normalizar(
+        document.getElementById("searchInput")?.value || ""
+      );
+      const municipio = texto(document.getElementById("selectMunicipio")?.value || "");
+      const categoria = texto(document.getElementById("selectCategoria")?.value || "");
+      const asesor = texto(document.getElementById("selectAsesor")?.value || "");
+      const ubicacion = texto(document.getElementById("selectUbicacion")?.value || "");
+
+      return escuelasData.filter(item => {
+        const escuela = normalizar(item.nombre_establecimiento);
+        const ubic = normalizar(obtenerUbicacion(item));
+        const muni = normalizar(item.municipio);
+        const cat = normalizar(item.categoria);
+        const as = normalizar(item.asesor_asignado);
+
+        const textoCoincide = !search ||
+          escuela.includes(search) ||
+          ubic.includes(search) ||
+          muni.includes(search) ||
+          cat.includes(search) ||
+          as.includes(search);
+
+        return textoCoincide &&
+          (!municipio || texto(item.municipio) === municipio) &&
+          (!categoria || texto(item.categoria) === categoria) &&
+          (!asesor || texto(item.asesor_asignado) === asesor) &&
+          (!ubicacion || normalizar(obtenerUbicacion(item)) === normalizar(ubicacion));
+      });
+    }
+
+
+    function aplicarFiltros() {
+
+      const gruposFiltrados = agruparUbicaciones(
+        obtenerRegistrosFiltradosActuales()
+      );
+
+      mostrarUbicacionesEnMapa(gruposFiltrados);
+
+      // Una ruta anterior deja de representar el filtro actual.
+      if (rutaLayer) {
+        map.removeLayer(rutaLayer);
+        rutaLayer = null;
+        rutaActiva = false;
+      }
+    }
+
+
+    /* =========================================================
+       MOSTRAR UBICACIONES EN MAPA
+    ========================================================= */
+
+    function mostrarUbicacionesEnMapa(
+      lista
+    ) {
+
+      markersGroup.clearLayers();
+
+
+      /*
+       * Todas las ubicaciones
+       */
+
+      const totalUbicaciones =
+        lista.length;
+
+
+      /*
+       * Ubicaciones con coordenadas
+       */
+
+      const mapeadas =
+        lista.filter(
+          ubicacion =>
+            ubicacion.tieneCoordenadas
+        );
+
+
+      /*
+       * Ubicaciones sin coordenadas
+       */
+
+      const sinCoordenadas =
+        lista.filter(
+          ubicacion =>
+            !ubicacion.tieneCoordenadas
+        );
+
+
+      /*
+       * Cantidad total de maestros
+       */
+
+      const totalMaestros =
+        lista.reduce(
+          (
+            total,
+            ubicacion
+          ) =>
+            total +
+            ubicacion.maestros.length,
+          0
+        );
+
+
+      /*
+       * Actualizar estadísticas
+       */
+
+      document.getElementById(
+        "contadorMaestros"
+      ).textContent =
+        totalMaestros;
+
+
+      document.getElementById(
+        "contadorUbicaciones"
+      ).textContent =
+        totalUbicaciones;
+
+
+      document.getElementById(
+        "contadorMapeadas"
+      ).textContent =
+        mapeadas.length;
+
+
+      document.getElementById(
+        "totalCounter"
+      ).textContent =
+        `${totalUbicaciones} ubicaciones`;
+
+
+      /*
+       * Crear marcadores
+       */
+
+      mapeadas.forEach(
+        ubicacion => {
+
+          const cantidad =
+            ubicacion.maestros.length;
+
+
+          const color =
+            obtenerColorCantidad(
+              cantidad
+            );
+
+
+          const icon =
+            L.divIcon({
+
+              className:
+                "",
+
+              html:
+                `<div
+                                    class="location-marker"
+                                    style="background:${color};">
+                                    ${cantidad}
+                                </div>`,
+
+              iconSize:
+                [42, 42],
+
+              iconAnchor:
+                [21, 21]
+
+            });
+
+
+          const marker =
+            L.marker(
+              [
+                ubicacion.latitud,
+                ubicacion.longitud
+              ],
+              {
+                icon
+              }
+            );
+
+
+          marker.bindTooltip(
+            `
+                        <strong>
+                            ${escaparHTML(
+              ubicacion.nombreUbicacion
+            )}
+                        </strong>
+
+                        <br>
+
+                        ${cantidad}
+                        maestro(s)
+                        `,
+            {
+              direction: "top"
+            }
+          );
+
+
+          marker.on(
+            "click",
+            () =>
+              abrirDetalleUbicacion(
+                ubicacion
+              )
+          );
+
+
+          markersGroup.addLayer(
+            marker
+          );
+
+        }
+      );
+
+
+      /*
+       * Ajustar mapa
+       */
+
+      if (
+        mapeadas.length > 0
+      ) {
+
+        const bounds =
+          L.latLngBounds(
+            mapeadas.map(
+              item =>
+                [
+                  item.latitud,
+                  item.longitud
+                ]
+            )
+          );
+
+
+        try {
+
+          map.fitBounds(
+            bounds,
+            {
+              padding:
+                [70, 70],
+
+              maxZoom:
+                14
+            }
+          );
+
+        } catch (error) {
+
+          console.warn(
+            "No se pudo ajustar el mapa:",
+            error
+          );
+
+        }
+
+      }
+
+
+      /*
+       * Información adicional
+       */
+
+      console.log(
+        "=============================="
+      );
+
+      console.log(
+        "MAESTROS:",
+        totalMaestros
+      );
+
+      console.log(
+        "UBICACIONES:",
+        totalUbicaciones
+      );
+
+      console.log(
+        "MAPEADAS:",
+        mapeadas.length
+      );
+
+      console.log(
+        "SIN COORDENADAS:",
+        sinCoordenadas.length
+      );
+
+      console.log(
+        "=============================="
+      );
+
+    }
+
+
+    /* =========================================================
+       COLOR SEGÚN CANTIDAD DE MAESTROS
+    ========================================================= */
+
+    function obtenerColorCantidad(
+      cantidad
+    ) {
+
+      if (cantidad >= 30) {
+
+        return "#dc2626";
+
+      }
+
+      if (cantidad >= 15) {
+
+        return "#f59e0b";
+
+      }
+
+      if (cantidad >= 5) {
+
+        return "#16a34a";
+
+      }
+
+      return "#2563eb";
+
+    }
+
+
+    /* =========================================================
+       ABRIR DETALLE DE UBICACIÓN
+    ========================================================= */
+
+    function abrirDetalleUbicacion(
+      ubicacion
+    ) {
+
+      selectedUbicacion =
+        ubicacion;
+
+
+      /*
+       * Categorías
+       */
+
+      const categorias =
+        Array.from(
+          ubicacion.categorias
+        );
+
+
+      document.getElementById(
+        "cardCategoria"
+      ).textContent =
+        categorias.length
+          ? categorias.join(" · ")
+          : "General";
+
+
+      /*
+       * Nombre ubicación
+       */
+
+      document.getElementById(
+        "cardUbicacionTitulo"
+      ).textContent =
+        ubicacion.nombreUbicacion;
+
+
+      /*
+       * Municipio
+       */
+
+      document.getElementById(
+        "cardMunicipio"
+      ).textContent =
+        Array.from(
+          ubicacion.municipios
+        ).join(" · ") ||
+        "N/A";
+
+
+      /*
+       * Total maestros
+       */
+
+      document.getElementById(
+        "cardTotalMaestros"
+      ).textContent =
+        ubicacion.maestros.length;
+
+
+      /*
+       * Dirección
+       */
+
+      document.getElementById(
+        "cardDireccion"
+      ).textContent =
+        Array.from(
+          ubicacion.direcciones
+        ).join(" · ") ||
+        "Sin información registrada";
+
+
+      /*
+       * Asesores
+       */
+
+      document.getElementById(
+        "cardAsesores"
+      ).textContent =
+        Array.from(
+          ubicacion.asesores
+        ).join(" · ") ||
+        "Sin asesor asignado";
+
+
+      /*
+       * Escuelas
+       */
+
+      const escuelas =
+        Array.from(
+          ubicacion.escuelas
+        );
+
+
+      document.getElementById(
+        "cardTotalEscuelas"
+      ).textContent =
+        `${escuelas.length} escuela(s)`;
+
+
+      const escuelasHTML =
+        escuelas.length
+          ? escuelas
+            .map(
+              escuela =>
+                `
+                                <div
+                                    class="bg-slate-50 border rounded-lg p-2">
+
+                                    <i
+                                        class="fa-solid fa-school text-blue-500 mr-1">
+                                    </i>
+
+                                    ${escaparHTML(
+                  escuela
+                )}
+
+                                </div>
+                                `
+            )
+            .join("")
+          : `
+                        <div class="text-slate-400">
+                            Sin escuela registrada
+                        </div>
+                    `;
+
+
+      document.getElementById(
+        "cardEscuelas"
+      ).innerHTML =
+        escuelasHTML;
+
+
+      /*
+       * Maestros
+       *
+       * El filtro automático para ver maestros es ÚNICAMENTE la categoría.
+       * La escuela no se utiliza como criterio, porque varias escuelas
+       * pueden compartir la misma ubicación.
+       */
+      const categoriasMaestros =
+        Array.from(ubicacion.maestros || [])
+          .map(item => texto(item.categoria))
+          .filter(Boolean)
+          .filter((x, i, arr) =>
+            arr.findIndex(y => texto(y).toLowerCase() === texto(x).toLowerCase()) === i
+          )
+          .sort((a,b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+
+      const escuelasMaestrosHTML =
+        categoriasMaestros.length
+          ? categoriasMaestros
+              .map(categoria => `
+                <a
+                  href="maestros.html?categoria=${encodeURIComponent(categoria)}"
+                  class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-xs">
+                  <i class="fa-solid fa-users"></i>
+                  <span>Ver maestros — ${escaparHTML(categoria)}</span>
+                </a>
+              `)
+              .join("")
+          : `
+              <div class="text-xs text-slate-400 bg-slate-50 border rounded-xl p-3">
+                No hay categoría registrada para esta ubicación.
+              </div>
+            `;
+
+      document.getElementById(
+        "cardEscuelaMaestros"
+      ).innerHTML =
+        escuelasMaestrosHTML;
+
+
+      /*
+       * Google Maps
+       */
+
+      const link =
+        ubicacion.tieneCoordenadas
+          ? `https://www.google.com/maps?q=${ubicacion.latitud},${ubicacion.longitud}`
+          : "#";
+
+
+      const mapsButton =
+        document.getElementById(
+          "cardGmapsLink"
+        );
+
+
+      mapsButton.href =
+        link;
+
+
+      if (
+        ubicacion.tieneCoordenadas
+      ) {
+
+        mapsButton.classList.remove(
+          "opacity-50",
+          "pointer-events-none"
+        );
+
+      } else {
+
+        mapsButton.classList.add(
+          "opacity-50",
+          "pointer-events-none"
+        );
+
+      }
+
+
+      /*
+       * Aviso sin coordenadas
+       */
+
+      const aviso =
+        document.getElementById(
+          "sinCoordenadasAviso"
+        );
+
+
+      if (
+        ubicacion.tieneCoordenadas
+      ) {
+
+        aviso.classList.add(
+          "hidden"
+        );
+
+      } else {
+
+        aviso.classList.remove(
+          "hidden"
+        );
+
+      }
+
+
+      /*
+       * Mostrar tarjeta
+       */
+
+      const card =
+        document.getElementById(
+          "detailCard"
+        );
+
+
+      card.classList.remove(
+        "translate-y-full",
+        "md:opacity-0",
+        "md:pointer-events-none"
+      );
+
+
+      card.classList.add(
+        "translate-y-0",
+        "md:opacity-100",
+        "md:pointer-events-auto"
+      );
+
+
+      /*
+       * Centrar mapa
+       */
+
+      if (
+        ubicacion.tieneCoordenadas
+      ) {
+
+        map.panTo(
+          [
+            ubicacion.latitud,
+            ubicacion.longitud
+          ],
+          {
+            animate: true,
+            duration: .6
+          }
+        );
+
+      }
+
+    }
+
+
+    /* =========================================================
+       DPI
+    ========================================================= */
+
+    function enmascararDPI(
+      dpi
+    ) {
+
+      const valor =
+        texto(dpi);
+
+
+      if (!valor) {
+
+        return "Sin registrar";
+
+      }
+
+
+      if (
+        valor.length <= 6
+      ) {
+
+        return "********";
+
+      }
+
+
+      return (
+        valor.substring(0, 4) +
+        " **** " +
+        valor.substring(
+          valor.length - 4
+        )
+      );
+
+    }
+
+
+    /* =========================================================
+       VER TODAS
+    ========================================================= */
+
+    function verTodasLasUbicaciones() {
+
+      document.getElementById(
+        "searchInput"
+      ).value = "";
+
+
+      document.getElementById(
+        "selectMunicipio"
+      ).value = "";
+
+
+      document.getElementById(
+        "selectCategoria"
+      ).value = "";
+
+
+      document.getElementById(
+        "selectAsesor"
+      ).value = "";
+
+
+      document.getElementById(
+        "selectUbicacion"
+      ).value = "";
+
+
+      actualizarFiltrosDependientes();
+
+
+      mostrarUbicacionesEnMapa(
+        ubicacionesData
+      );
+
+
+      cerrarDetalle();
+      if (rutaLayer) {
+        map.removeLayer(rutaLayer);
+        rutaLayer = null;
+      }
+      rutaActiva = false;
+
+    }
+
+
+
+
+    /* =========================================================
+       MINIMIZAR / RESTAURAR DETALLE
+    ========================================================= */
+
+    function minimizarDetalle() {
+      const card = document.getElementById("detailCard");
+      const restore = document.getElementById("restoreDetailBtn");
+      card.classList.add("translate-y-full", "md:opacity-0", "md:pointer-events-none");
+      card.classList.remove("translate-y-0", "md:opacity-100", "md:pointer-events-auto");
+      restore.classList.remove("hidden");
+    }
+
+    function restaurarDetalle() {
+      if (!selectedUbicacion) return;
+      const card = document.getElementById("detailCard");
+      const restore = document.getElementById("restoreDetailBtn");
+      card.classList.remove("translate-y-full", "md:opacity-0", "md:pointer-events-none");
+      card.classList.add("translate-y-0", "md:opacity-100", "md:pointer-events-auto");
+      restore.classList.add("hidden");
+    }
+
+    function cerrarDetalle() {
+      const card = document.getElementById("detailCard");
+      const restore = document.getElementById("restoreDetailBtn");
+      card.classList.add("translate-y-full", "md:opacity-0", "md:pointer-events-none");
+      card.classList.remove("translate-y-0", "md:opacity-100", "md:pointer-events-auto");
+      restore.classList.add("hidden");
+      selectedUbicacion = null;
+    }
+
+    async function copiarDPI(dpi) {
+      try {
+        await navigator.clipboard.writeText(dpi);
+        mostrarEstado("DPI copiado");
+        setTimeout(() => {
+          if (escuelasData.length) mostrarEstado(`${escuelasData.length} registros cargados`);
+        }, 1200);
+      } catch (e) {
+        const ta = document.createElement("textarea");
+        ta.value = dpi;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+    }
+
+    /* =========================================================
+       CREAR RUTA - TODOS LOS PUNTOS ACTIVOS
+    ========================================================= */
+
+    async function crearRuta() {
+      // La ruta SIEMPRE se construye con el mismo conjunto de registros
+      // que está activo en los filtros de la pantalla.
+      const registrosFiltrados = obtenerRegistrosFiltradosActuales();
+      const gruposFiltrados = agruparUbicaciones(registrosFiltrados);
+      const puntos = gruposFiltrados.filter(u =>
+        u.tieneCoordenadas &&
+        Number.isFinite(Number(u.latitud)) &&
+        Number.isFinite(Number(u.longitud))
+      );
+
+      if (!puntos.length) {
+        alert("No hay ubicaciones activas con coordenadas para crear una ruta.");
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        alert("Tu navegador no permite obtener tu ubicación.");
+        return;
+      }
+
+      mostrarEstado("Obteniendo tu ubicación para crear la ruta...");
+
+      navigator.geolocation.getCurrentPosition(
+        async position => {
+          const origen = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+
+          // Orden de visita: vecino más cercano para reducir recorridos innecesarios.
+          const pendientes = puntos.slice();
+          const ordenados = [];
+          let actual = origen;
+
+          while (pendientes.length) {
+            let mejorIndex = 0;
+            let mejorDist = Infinity;
+
+            pendientes.forEach((p, i) => {
+              const d = distanciaKm(actual.lat, actual.lng, p.latitud, p.longitud);
+              if (d < mejorDist) {
+                mejorDist = d;
+                mejorIndex = i;
+              }
+            });
+
+            const siguiente = pendientes.splice(mejorIndex, 1)[0];
+            ordenados.push(siguiente);
+            actual = { lat: siguiente.latitud, lng: siguiente.longitud };
+          }
+
+          if (rutaLayer) {
+            map.removeLayer(rutaLayer);
+            rutaLayer = null;
+          }
+
+          const coords = [
+            `${origen.lng},${origen.lat}`,
+            ...ordenados.map(p => `${p.longitud},${p.latitud}`)
+          ].join(";");
+
+          try {
+            const response = await fetch(
+              `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`
+            );
+            const data = await response.json();
+
+            if (data.code !== "Ok" || !data.routes?.length) {
+              throw new Error("No fue posible calcular la ruta.");
+            }
+
+            rutaLayer = L.geoJSON(data.routes[0].geometry, {
+              style: {
+                weight: 5,
+                opacity: 0.85
+              }
+            }).addTo(map);
+
+            map.fitBounds(rutaLayer.getBounds(), { padding: [60, 60] });
+
+            L.marker([origen.lat, origen.lng], {
+              icon: L.divIcon({
+                className: "",
+                html: '<div style="background:#111827;color:white;border:3px solid white;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,.3)"><i class="fa-solid fa-location-crosshairs"></i></div>',
+                iconSize: [38,38],
+                iconAnchor: [19,19]
+              })
+            }).addTo(rutaLayer);
+
+            rutaActiva = true;
+            mostrarEstado(`Ruta creada según el filtro actual: ${ordenados.length} puntos`);
+
+            mostrarSelectorRuta(origen, ordenados);
+          } catch (error) {
+            console.error(error);
+            alert("Se dibujó el orden de visita, pero no se pudo obtener la ruta por carretera. Puedes elegir Google Maps o Waze para navegar.");
+            mostrarSelectorRuta(origen, ordenados);
+          }
+        },
+        error => {
+          console.error(error);
+          alert("No se pudo obtener tu ubicación. Activa la ubicación del navegador y vuelve a intentarlo.");
+          mostrarEstado("No se pudo obtener la ubicación");
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 60000
+        }
+      );
+    }
+
+    function obtenerValoresUnicos(campo) {
+      return [...new Set(
+        escuelasData.map(x => texto(x[campo])).filter(Boolean)
+      )].sort((a,b) => a.localeCompare(b, "es", {sensitivity:"base"}));
+    }
+
+    function abrirGestionAsignaciones() {
+      const registros = obtenerRegistrosFiltradosActuales();
+      document.getElementById("gestionResumen").innerHTML =
+        `<b>${registros.length}</b> registro(s) seleccionados por el filtro actual.`;
+
+      document.getElementById("listaMunicipiosGestion").innerHTML =
+        obtenerValoresUnicos("municipio").map(x => `<option value="${escaparHTML(x)}"></option>`).join("");
+      document.getElementById("listaAsesoresGestion").innerHTML =
+        obtenerValoresUnicos("asesor_asignado").map(x => `<option value="${escaparHTML(x)}"></option>`).join("");
+
+      document.getElementById("gestionEstado").className = "hidden rounded-xl p-3 text-sm";
+      document.getElementById("gestionModal").classList.remove("hidden");
+    }
+
+    function cerrarGestionAsignaciones() {
+      document.getElementById("gestionModal").classList.add("hidden");
+    }
+
+    function mostrarEstadoGestion(mensaje, ok=true) {
+      const el = document.getElementById("gestionEstado");
+      el.className = `rounded-xl p-3 text-sm ${ok ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-700"}`;
+      el.textContent = mensaje;
+    }
+
+    async function actualizarRegistrosEnBloque(cambios, descripcion) {
+      const registros = obtenerRegistrosFiltradosActuales();
+      if (!registros.length) {
+        mostrarEstadoGestion("No hay registros que coincidan con los filtros actuales.", false);
+        return;
+      }
+
+      if (!confirm(`¿Confirmas ${descripcion} a ${registros.length} registro(s)?`)) return;
+
+      try {
+        // Si existe id en todos los registros, hacemos una sola actualización
+        // para que el cambio sea rápido incluso con muchos registros.
+        const ids = registros
+          .map(x => x.id)
+          .filter(x => x !== undefined && x !== null);
+
+        if (ids.length === registros.length && ids.length) {
+          const { error } = await supabaseClient
+            .from("bd")
+            .update(cambios)
+            .in("id", ids);
+          if (error) throw error;
+          registros.forEach(item => Object.assign(item, cambios));
+        } else {
+          // Respaldo para instalaciones antiguas sin columna id.
+          for (const item of registros) {
+            let query = supabaseClient.from("bd").update(cambios);
+            if (item.identificacion) {
+              query = query.eq("identificacion", item.identificacion);
+            } else {
+              query = query.eq("nombre", item.nombre);
+            }
+            const { error } = await query;
+            if (error) throw error;
+            Object.assign(item, cambios);
+          }
+        }
+
+        const actualizados = registros.length;
+
+        ubicacionesData = agruparUbicaciones(escuelasData);
+        actualizarFiltrosDependientes();
+        mostrarUbicacionesEnMapa(agruparUbicaciones(obtenerRegistrosFiltradosActuales()));
+        mostrarEstadoGestion(`Listo. Se actualizaron ${actualizados} registro(s).`, true);
+      } catch (e) {
+        console.error(e);
+        mostrarEstadoGestion("No se pudo completar el cambio: " + (e.message || e), false);
+      }
+    }
+
+    async function asignarMunicipio() {
+      const valor = texto(document.getElementById("gestionMunicipio").value);
+      if (!valor) return mostrarEstadoGestion("Escribe o selecciona un municipio.", false);
+      await actualizarRegistrosEnBloque({ municipio: valor }, `asignar el municipio "${valor}"`);
+    }
+
+    async function desasignarMunicipio() {
+      await actualizarRegistrosEnBloque({ municipio: null }, "desasignar el municipio");
+    }
+
+    async function asignarAsesor() {
+      const valor = texto(document.getElementById("gestionAsesor").value);
+      if (!valor) return mostrarEstadoGestion("Escribe o selecciona un asesor.", false);
+      await actualizarRegistrosEnBloque({ asesor_asignado: valor }, `asignar el asesor "${valor}"`);
+    }
+
+    async function desasignarAsesor() {
+      await actualizarRegistrosEnBloque({ asesor_asignado: null }, "quitar el asesor");
+    }
+
+    function distanciaKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
+    let rutaOrigenPendiente = null;
+    let rutaPuntosPendientes = [];
+
+    function mostrarSelectorRuta(origen, puntos) {
+      rutaOrigenPendiente = origen;
+      rutaPuntosPendientes = puntos;
+      document.getElementById("rutaAppModal").classList.remove("hidden");
+    }
+
+    function cerrarSelectorRuta() {
+      document.getElementById("rutaAppModal").classList.add("hidden");
+      rutaOrigenPendiente = null;
+      rutaPuntosPendientes = [];
+    }
+
+    function elegirAppRuta(app) {
+      const origen = rutaOrigenPendiente;
+      const puntos = rutaPuntosPendientes.slice();
+
+      cerrarSelectorRuta();
+
+      if (!origen || !puntos.length) return;
+
+      if (app === "google") {
+        abrirNavegacionGoogle(origen, puntos);
+      } else {
+        abrirNavegacionWaze(origen, puntos);
+      }
+    }
+
+    function abrirNavegacionWaze(origen, puntos) {
+      // Waze no permite pasar de forma fiable una ruta completa con
+      // múltiples paradas desde un enlace web. Abrimos el siguiente
+      // destino y conservamos el orden calculado por el sistema.
+      const siguiente = puntos[0];
+
+      const url =
+        `https://www.waze.com/ul?ll=${siguiente.latitud}%2C${siguiente.longitud}&navigate=yes`;
+
+      window.open(url, "_blank");
+
+      if (puntos.length > 1) {
+        setTimeout(() => {
+          alert(
+            `Waze abrió el primer destino.\n\n` +
+            `La ruta tiene ${puntos.length} puntos. ` +
+            `Cuando llegues al destino, vuelve al mapa para abrir el siguiente punto.`
+          );
+        }, 500);
+      }
+    }
+
+    function abrirNavegacionGoogle(origen, puntos) {
+      // Google Maps limita los waypoints según plataforma. Abrimos por bloques
+      // para que todos los puntos puedan ser visitados sin perder ubicaciones.
+      const bloques = [];
+      const tamano = 8;
+
+      for (let i = 0; i < puntos.length; i += tamano) {
+        bloques.push(puntos.slice(i, i + tamano));
+      }
+
+      if (bloques.length === 1) {
+        const destino = bloques[0][bloques[0].length - 1];
+        const waypoints = bloques[0]
+          .slice(0, -1)
+          .map(p => `${p.latitud},${p.longitud}`)
+          .join("|");
+
+        const url =
+          `https://www.google.com/maps/dir/?api=1&origin=${origen.lat},${origen.lng}` +
+          `&destination=${destino.latitud},${destino.longitud}` +
+          (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : "") +
+          `&travelmode=driving`;
+
+        window.open(url, "_blank");
+        return;
+      }
+
+      const urls = bloques.map((bloque, index) => {
+        const inicio = index === 0 ? origen : bloques[index - 1][bloques[index - 1].length - 1];
+        const destino = bloque[bloque.length - 1];
+        const waypoints = bloque.slice(0, -1)
+          .map(p => `${p.latitud},${p.longitud}`)
+          .join("|");
+
+        return `https://www.google.com/maps/dir/?api=1&origin=${inicio.lat || inicio.latitud},${inicio.lng || inicio.longitud}` +
+          `&destination=${destino.latitud},${destino.longitud}` +
+          (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : "") +
+          `&travelmode=driving`;
+      });
+
+      alert(`Hay ${puntos.length} puntos. Google Maps los abrirá en ${urls.length} tramos para no perder ubicaciones.`);
+      urls.forEach((url, i) => setTimeout(() => window.open(url, "_blank"), i * 800));
+    }
+
+    // Exportamos funciones usadas desde botones inline.
+    window.crearRuta = crearRuta;
+    window.minimizarDetalle = minimizarDetalle;
+    window.restaurarDetalle = restaurarDetalle;
+    window.copiarDPI = copiarDPI;
+    window.elegirAppRuta = elegirAppRuta;
+    window.cerrarSelectorRuta = cerrarSelectorRuta;
+
+    /* =========================================================
+       MOSTRAR / OCULTAR FILTROS
+    ========================================================= */
+
+    function toggleFiltros() {
+
+      document
+        .getElementById(
+          "filtrosContainer"
+        )
+        .classList.toggle(
+          "hidden"
+        );
+
+    }
+
+
+    /* =========================================================
+       ESTADO
+    ========================================================= */
+
+    function mostrarEstado(
+      mensaje
+    ) {
+
+      document.getElementById(
+        "totalCounter"
+      ).textContent =
+        mensaje;
+
+    }
+
+
+    /* =========================================================
+       ERROR
+    ========================================================= */
+
+    function mostrarError(
+      error
+    ) {
+
+      const modal =
+        document.getElementById(
+          "errorModal"
+        );
+
+
+      const textoError = [
+
+        `Mensaje: ${error?.message || "Sin mensaje"}`,
+
+        `Código: ${error?.code || "Sin código"}`,
+
+        `Detalles: ${error?.details || "Sin detalles"}`,
+
+        `Sugerencia: ${error?.hint || "Sin sugerencia"}`
+
+      ].join("\n\n");
+
+
+      document.getElementById(
+        "errorText"
+      ).textContent =
+        textoError;
+
+
+      modal.classList.remove(
+        "hidden"
+      );
+
+    }
+
+
+    function cerrarError() {
+
+      document
+        .getElementById(
+          "errorModal"
+        )
+        .classList.add(
+          "hidden"
+        );
+
+    }
+
+
+    /* =========================================================
+       INICIAR
+    ========================================================= */
+
+    window.onload =
+      initMap;
+
+
+  </script>
+
+</body>
+
+</html>

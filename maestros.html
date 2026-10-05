@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maestros - Censo de Escuelas</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      font-family: Arial, sans-serif
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(12px)
+    }
+
+    .table-wrap {
+      overflow: auto
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #0f172a;
+      color: #fff;
+      z-index: 2
+    }
+
+    td,
+    th {
+      padding: 10px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap
+    }
+
+    tbody tr:hover {
+      background: #f8fafc
+    }
+
+    .loading {
+      animation: pulse 1.4s infinite
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: .45
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="max-w-[1500px] mx-auto p-3 md:p-5">
+    <div class="glass rounded-2xl shadow-xl border border-white/70 overflow-hidden">
+      <div class="p-4 md:p-5 border-b bg-white">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <a href="index.html"
+              class="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center hover:bg-slate-900"
+              title="Volver al mapa">
+              <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div class="bg-blue-600 text-white p-3 rounded-xl">
+              <i class="fa-solid fa-users"></i>
+            </div>
+            <div>
+              <h1 class="font-extrabold text-slate-900 text-lg">Maestros</h1>
+              <p id="contador" class="text-xs text-slate-500">Cargando...</p>
+            </div>
+          </div>
+          <button onclick="cargarMaestros(true)"
+            class="px-4 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900">
+            <i class="fa-solid fa-rotate mr-1"></i>Actualizar
+          </button>
+        </div>
+
+        <div class="mt-4 grid md:grid-cols-[1fr_180px_180px] gap-2">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="buscador" oninput="filtrar()" type="text"
+              placeholder="Buscar por nombre, DPI, escuela o teléfono..."
+              class="w-full pl-9 pr-4 py-3 bg-slate-100 rounded-xl border border-slate-200 outline-none focus:bg-white focus:border-blue-500">
+          </div>
+          <select id="filtroEscuela" onchange="filtrar()"
+            class="px-3 py-3 bg-slate-100 rounded-xl border border-slate-200 text-sm outline-none">
+            <option value="">Todas las escuelas</option>
+          </select>
+          <select id="filtroCategoria" onchange="filtrar()"
+            class="border border-slate-200 rounded-xl px-3 py-2 text-sm w-full md:w-auto">
+            <option value="">Todas las categorías</option>
+          </select>
+        </div>
+
+        <div id="escuelaSeleccionada"
+          class="hidden mt-3 bg-green-50 border border-green-200 text-green-700 rounded-xl px-3 py-2 text-xs font-bold">
+        </div>
+      </div>
+
+      <div id="listaMaestros" class="max-h-[calc(100vh-205px)] overflow-y-auto p-3 md:p-5 space-y-2">
+        <div class="text-center py-10 text-slate-400">Cargando maestros...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal edición -->
+  <div id="editModal" class="hidden fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+      <div class="p-5 border-b flex items-center justify-between">
+        <div>
+          <h2 class="font-extrabold text-lg">Editar maestro</h2>
+          <p class="text-xs text-slate-500">Puedes cambiar escuela y teléfono.</p>
+        </div>
+        <button onclick="cerrarEditor()" class="p-2 text-slate-400 hover:text-slate-800"><i
+            class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">Nombre</label>
+          <input id="editNombre" disabled class="w-full mt-1 px-3 py-2.5 bg-slate-100 rounded-xl border text-sm">
+        </div>
+        <div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">DPI</label>
+          <div class="flex gap-2">
+            <input id="editDpi" disabled
+              class="w-full mt-1 px-3 py-2.5 bg-slate-100 rounded-xl border text-sm font-mono">
+            <button onclick="copiarDesdeEditor()"
+              class="mt-1 px-3 rounded-xl bg-blue-50 text-blue-600 font-bold text-xs">Copiar</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">Escuela</label>
+          <input id="editEscuela"
+            class="w-full mt-1 px-3 py-2.5 bg-white rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="text-[10px] font-bold uppercase text-slate-400">Teléfono</label>
+          <input id="editTelefono" inputmode="tel"
+            class="w-full mt-1 px-3 py-2.5 bg-white rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none"
+            placeholder="Ej. 5555-5555">
+        </div>
+        <div id="editEstado" class="hidden p-3 rounded-xl text-xs"></div>
+      </div>
+      <div class="p-5 border-t flex gap-2">
+        <button onclick="cerrarEditor()" class="flex-1 py-3 rounded-xl bg-slate-100 font-bold text-sm">Cancelar</button>
+        <button id="guardarBtn" onclick="guardarCambios()"
+          class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700">
+          <i class="fa-solid fa-floppy-disk mr-1"></i>Guardar cambios
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://vlbevbsvxdjmewudzdhf.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsYmV2YnN2eGRqbWV3dWR6ZGhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExNTMyMjUsImV4cCI6MjEwNjcyOTIyNX0.6NS2vrEjL2p3Ohzkgj78YdGmbQqLzKsEEnQehlCv2YI";
+
+
+
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let maestros = [];
+    let filtrados = [];
+    let maestroEditando = null;
+    const parametrosURL = new URLSearchParams(window.location.search);
+    const categoriaInicial = parametrosURL.get("categoria") || "";
+
+    const t = v => v === null || v === undefined ? "" : String(v).trim();
+    const n = v => t(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    const esc = v => t(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
+    function getTelefono(x) {
+      return t(x.telefono ?? x.Telefono ?? x.TELEFONO ?? x["Teléfono"]);
+    }
+
+    async function cargarMaestros(refrescar = false) {
+      document.getElementById("contador").textContent = "Cargando datos...";
+      if (refrescar) document.getElementById("tabla").innerHTML = '<tr><td colspan="6" class="text-center py-10 text-slate-400 loading">Actualizando...</td></tr>';
+
+      try {
+        // Cargamos en páginas para evitar el límite de 1000 filas de Supabase.
+        let todas = [];
+        const pageSize = 1000;
+        let desde = 0;
+
+        while (true) {
+          const { data, error } = await db.from("bd").select("*").range(desde, desde + pageSize - 1);
+          if (error) throw error;
+          const lote = data || [];
+          todas = todas.concat(lote);
+          if (lote.length < pageSize) break;
+          desde += pageSize;
+        }
+
+        maestros = todas;
+        llenarEscuelas();
+        filtrar();
+      } catch (e) {
+        console.error(e);
+        document.getElementById("contador").textContent = "Error al cargar";
+        document.getElementById("tabla").innerHTML =
+          `<tr><td colspan="6" class="text-center py-10 text-red-600">No se pudieron cargar los maestros.<br><small>${esc(e.message || e)}</small></td></tr>`;
+      }
+    }
+
+    function llenarEscuelas() {
+      const select = document.getElementById("filtroEscuela");
+      const actual = select.value;
+      const escuelas = [...new Set(maestros.map(x => t(x.nombre_establecimiento)).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+
+      select.innerHTML = '<option value="">Todas las escuelas</option>' +
+        escuelas.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+
+      // La escuela NO se aplica automáticamente desde la ventana del mapa.
+      // El filtro automático para "Ver maestros" es únicamente la categoría.
+      if (escuelas.includes(actual)) select.value = actual;
+
+      const selectCategoria = document.getElementById("filtroCategoria");
+      if (selectCategoria) {
+        const categorias = [...new Set(maestros.map(x => t(x.categoria)).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+        selectCategoria.innerHTML = '<option value="">Todas las categorías</option>' +
+          categorias.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+
+        const categoriaURL = n(categoriaInicial);
+        const categoriaEncontrada = categorias.find(x => n(x) === categoriaURL);
+        if (categoriaEncontrada) selectCategoria.value = categoriaEncontrada;
+      }
+    }
+
+    function filtrar() {
+      const q = n(document.getElementById("buscador").value);
+      const escuela = n(document.getElementById("filtroEscuela").value);
+      const categoria = n(document.getElementById("filtroCategoria")?.value || "");
+
+      const selectEscuela = document.getElementById("filtroEscuela");
+      const selectCategoria = document.getElementById("filtroCategoria");
+      const indicador = document.getElementById("escuelaSeleccionada");
+      if (selectEscuela.value || selectCategoria?.value) {
+        indicador.classList.remove("hidden");
+        indicador.innerHTML = `<i class="fa-solid fa-filter mr-1"></i> Mostrando maestros${selectCategoria?.value ? ` de la categoría: ${esc(selectCategoria.value)}` : ""}${selectEscuela.value ? ` — Escuela: ${esc(selectEscuela.value)}` : ""}`;
+      } else {
+        indicador.classList.add("hidden");
+        indicador.textContent = "";
+      }
+
+      filtrados = maestros.filter(x => {
+        const nombre = n(x.nombre);
+        const dpi = n(x.identificacion);
+        const escu = n(x.nombre_establecimiento);
+        const tel = n(getTelefono(x));
+        return (!q || nombre.includes(q) || dpi.includes(q) || escu.includes(q) || tel.includes(q))
+          && (!escuela || escu === escuela)
+          && (!categoria || n(x.categoria) === categoria);
+      });
+
+      renderTabla();
+    }
+
+    function renderTabla() {
+      const lista = document.getElementById("listaMaestros");
+      document.getElementById("contador").textContent =
+        `${filtrados.length} de ${maestros.length} maestros`;
+
+      if (!filtrados.length) {
+        lista.innerHTML = '<div class="text-center py-10 text-slate-400">No se encontraron resultados.</div>';
+        return;
+      }
+
+      lista.innerHTML = filtrados.map((m, i) => {
+        const dpi = t(m.identificacion);
+        const escuela = t(m.nombre_establecimiento) || "Sin asignación";
+        const telefono = getTelefono(m) || "Sin teléfono";
+        const ubicacion = t(m.ubicacion ?? m.Ubicacion ?? m.UBICACION ?? m["Ubicación"]) || "Sin ubicación";
+        const categoria = t(m.categoria) || "Sin categoría";
+        const municipio = t(m.municipio) || "Sin municipio";
+        const asesor = t(m.asesor_asignado) || "Sin asesor";
+
+        return `<div class="maestro-item bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <button type="button" onclick="toggleMaestro(${i})" class="w-full text-left p-4 flex items-center gap-3 active:bg-slate-50">
+        <div class="w-11 h-11 shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-extrabold">
+          ${esc(t(m.nombre).charAt(0)).toUpperCase() || '<i class="fa-solid fa-user"></i>'}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="font-extrabold text-slate-800 truncate">${esc(m.nombre) || "Sin nombre"}</div>
+          <div class="text-xs text-slate-500 truncate">${esc(escuela)}</div>
+          <div class="text-[11px] text-blue-600 font-bold mt-0.5">${esc(categoria)}</div>
+        </div>
+        <i id="flechaMaestro-${i}" class="fa-solid fa-chevron-down text-slate-400 transition-transform"></i>
+      </button>
+
+      <div id="detalleMaestro-${i}" class="hidden border-t border-slate-100 bg-slate-50 p-4 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
+            <div class="text-[10px] uppercase font-bold text-slate-400">DPI</div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="font-mono text-sm font-bold break-all">${esc(dpi) || "Sin DPI"}</span>
+              ${dpi ? `<button onclick="event.stopPropagation(); copiarDPI(${i})" class="shrink-0 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold"><i class="fa-regular fa-copy mr-1"></i>Copiar</button>` : ""}
+            </div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Teléfono</div>
+            <div class="text-sm font-bold mt-1">${esc(telefono)}</div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100 sm:col-span-2">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Escuela</div>
+            <div class="text-sm font-bold mt-1">${esc(escuela)}</div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Categoría</div>
+            <div class="text-sm font-bold mt-1">${esc(categoria)}</div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Municipio</div>
+            <div class="text-sm font-bold mt-1">${esc(municipio)}</div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100 sm:col-span-2">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Ubicación</div>
+            <div class="text-sm font-bold mt-1">${esc(ubicacion)}</div>
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-slate-100 sm:col-span-2">
+            <div class="text-[10px] uppercase font-bold text-slate-400">Asesor</div>
+            <div class="text-sm font-bold mt-1">${esc(asesor)}</div>
+          </div>
+        </div>
+        <button onclick="event.stopPropagation(); abrirEditor(${i})" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm">
+          <i class="fa-solid fa-pen-to-square mr-1"></i>Editar maestro
+        </button>
+      </div>
+    </div>`;
+      }).join("");
+    }
+
+    function toggleMaestro(i) {
+      const detalle = document.getElementById(`detalleMaestro-${i}`);
+      const flecha = document.getElementById(`flechaMaestro-${i}`);
+      if (!detalle) return;
+      const abierto = !detalle.classList.contains("hidden");
+      detalle.classList.toggle("hidden", abierto);
+      if (flecha) flecha.classList.toggle("rotate-180", !abierto);
+    }
+
+    async function copiarDPI(i) {
+      const dpi = t(filtrados[i]?.identificacion);
+      if (!dpi) return;
+      try {
+        await navigator.clipboard.writeText(dpi);
+        alert("DPI copiado: " + dpi);
+      } catch (e) {
+        prompt("Copia el DPI:", dpi);
+      }
+    }
+
+    function abrirEditor(i) {
+      maestroEditando = filtrados[i];
+      document.getElementById("editNombre").value = t(maestroEditando.nombre);
+      document.getElementById("editDpi").value = t(maestroEditando.identificacion);
+      document.getElementById("editEscuela").value = t(maestroEditando.nombre_establecimiento);
+      document.getElementById("editTelefono").value = getTelefono(maestroEditando);
+      document.getElementById("editEstado").className = "hidden p-3 rounded-xl text-xs";
+      document.getElementById("editModal").classList.remove("hidden");
+    }
+
+    function cerrarEditor() {
+      document.getElementById("editModal").classList.add("hidden");
+      maestroEditando = null;
+    }
+
+    async function copiarDesdeEditor() {
+      const dpi = document.getElementById("editDpi").value;
+      if (dpi) await navigator.clipboard.writeText(dpi);
+    }
+
+    async function guardarCambios() {
+      if (!maestroEditando) return;
+
+      const escuela = document.getElementById("editEscuela").value.trim();
+      const telefono = document.getElementById("editTelefono").value.trim();
+      const estado = document.getElementById("editEstado");
+      const btn = document.getElementById("guardarBtn");
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Guardando...';
+
+      try {
+        // La columna de teléfono se asume "telefono", que es la columna nueva indicada.
+        let query = db.from("bd").update({
+          nombre_establecimiento: escuela || null,
+          telefono: telefono || null
+        });
+
+        if (maestroEditando.id !== undefined && maestroEditando.id !== null) {
+          query = query.eq("id", maestroEditando.id);
+        } else {
+          // Respaldo si la tabla no expone una columna id.
+          query = query.eq("nombre", maestroEditando.nombre)
+            .eq("identificacion", maestroEditando.identificacion);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
+
+        maestroEditando.nombre_establecimiento = escuela;
+        maestroEditando.telefono = telefono;
+
+        estado.className = "p-3 rounded-xl text-xs bg-green-50 border border-green-200 text-green-700";
+        estado.textContent = "Cambios guardados correctamente en Supabase.";
+        filtrar();
+
+        setTimeout(() => cerrarEditor(), 700);
+      } catch (e) {
+        console.error(e);
+        estado.className = "p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700";
+        estado.textContent = "No se pudo guardar: " + (e.message || e);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>Guardar cambios';
+      }
+    }
+
+    window.addEventListener("load", () => cargarMaestros(false));
+  </script>
+</body>
+
+</html>
